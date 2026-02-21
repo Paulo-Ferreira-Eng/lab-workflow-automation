@@ -1,0 +1,287 @@
+import os
+import tkinter as tk
+from tkinter import messagebox
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.pdfgen import canvas
+from datetime import datetime
+import win32api
+import win32print
+
+CHECKBOXES = {
+    "BIOQUIMICA": [
+        "Amilase", "Ácido Úrico", "Bilirrubina T.", "Bil. Direta", "Bil. Indireta",
+        "Cálcio I.", "Cloreto", "Colesterol T.", "Colesterol HDL", "Colesterol LDL",
+        "Colesterol VLDL", "Creatina", "LDH", "Ferro Sérico", "Fosfatase Alc.",
+        "GGT", "Glicose", "Potássio", "Prot. Totais", "Albumina", "Sódio",
+        "TGO", "TGP", "Triglicerídeos", "Uréia", "Ferritina", "Vitamina D",
+        "Hemog. Glicada", "IgE", "BHCG"
+    ],
+    "HEMATOLOGIA": ["Reticulócitos"],
+    "URINALISE": ["Gram"],
+    "COPROLOGIA": ["Exame Parasitológico", "Sangue Oculto"]
+}
+
+def salvar_pdf(nome, nascimento, coleta, selecionados):
+    data_str = datetime.today().strftime('%d-%m-%Y')
+    pasta_base = os.path.join(os.path.expanduser('~'), 'Desktop', 'fichasmunicipal', data_str)
+    os.makedirs(pasta_base, exist_ok=True)
+
+    nome_base = os.path.join(pasta_base, nome)
+    caminho = f"{nome_base}.pdf"
+    count = 2
+    while os.path.exists(caminho):
+        caminho = f"{nome_base}{count}.pdf"
+        count += 1
+
+    c = canvas.Canvas(caminho, pagesize=landscape(A4))
+    desenhar_ficha_completa(c, nome, nascimento, coleta, selecionados)
+    c.save()
+    return caminho
+
+def imprimir_pdf(caminho):
+    win32api.ShellExecute(0, "print", caminho, None, ".", 0)
+
+def desenhar_ficha_completa(c, nome, dn, coleta, selecionados):
+    largura, altura = landscape(A4)
+    col_width = largura / 4
+    margin = 20
+
+    def draw_header(x, y):
+        c.setFont("Helvetica-Bold", 10)
+        c.drawCentredString(x + col_width / 2, y, "LAB. MUNICIPAL DE SJDR")
+        y -= 14
+        c.setFont("Helvetica", 9)
+        c.drawString(x, y, f"Nome: {nome}")
+        y -= 12
+        c.drawString(x, y, f"Data de nascimento: {dn}")
+        y -= 12
+        c.drawString(x, y, f"Data da coleta: {coleta}")
+        y -= 14
+        c.line(x, y, x + col_width - margin, y)
+        return y - 10
+
+    def draw_checkbox_line(x, y, exame):
+        estado = "x" if exame in selecionados else " "
+        c.drawString(x, y, f"( {estado} ) {exame}: ")
+        text_width = c.stringWidth(f"( {estado} ) {exame}: ", "Helvetica", 9)
+        c.line(x + text_width + 2, y, x + col_width - margin, y)
+        return y - 12
+
+    def draw_field_line(x, y, label):
+        texto = f"{label}:"
+        c.drawString(x, y, texto)
+        text_width = c.stringWidth(texto, "Helvetica", 9)
+        c.line(x + text_width + 4, y, x + col_width - margin, y)
+        return y - 12
+
+    def draw_observacoes(x, y):
+        c.line(x, y, x + col_width - margin, y)
+        y -= 12
+        c.drawString(x, y, "Observações:")
+        y -= 48
+        c.line(x, y, x + col_width - margin, y)
+        y -= 12
+        c.drawString(x, y, "Liberado por:")
+        y -= 48
+        return y
+
+    def draw_bioquimica(x, y):
+        y = draw_header(x, y)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(x + col_width / 2, y, "BIOQUIMICA")
+        y -= 14
+        c.setFont("Helvetica", 9)
+        for exame in CHECKBOXES["BIOQUIMICA"]:
+            y = draw_checkbox_line(x, y, exame)
+        y = draw_observacoes(x, y)
+
+    def draw_hematologia(x, y):
+        y = draw_header(x, y)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(x + col_width / 2, y, "HEMATOLOGIA")
+        y -= 14
+        c.setFont("Helvetica", 9)
+        for exame in [
+            "Hemácias", "Hematócrito", "Hemoglobina", "MCV", "MCH", "MCHC",
+            "Leucócitos", "Mielócitos", "Metamielócitos", "Bastonetes",
+            "Segmentados", "Basófilos", "Eosinófilos", "Linfócitos",
+            "Linfócito reativo", "Monócito", "Plaqueta", "RDW"]:
+            y = draw_field_line(x, y, exame)
+        c.line(x, y, x + col_width - margin, y)
+        y -= 12
+        estado = "x" if "Reticulócitos" in selecionados else " "
+        c.drawString(x, y, f"( {estado} ) Reticulócitos")
+        y -= 24
+        y = draw_observacoes(x, y)
+
+    def draw_urinalise(x, y):
+        y = draw_header(x, y)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(x + col_width / 2, y, "URINÁLISE")
+        y -= 14
+        c.drawCentredString(x + col_width / 2, y, "Características Físicas")
+        y -= 14
+        c.setFont("Helvetica", 8)
+        for linha in [
+            "Cor:  Claro  |  Citrino  |  Escuro  |  âmbar",
+            "Cheiro:  Sui Generes    |    Fétido",
+            "Aspecto:  Límpido  |  L. Turvo  |  Turvo",
+            "Densidade:1000 1005 1010 1015 1020 1025 1030",
+            "pH:  5  |  6  |  6,5  |  7  |  8  |  9"]:
+            c.drawString(x, y, linha)
+            y -= 12
+        c.line(x, y, x + col_width - margin, y)
+        y -= 12
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(x + col_width / 2, y, "Elementos Anormais")
+        y -= 14
+        c.setFont("Helvetica", 9)
+        for campo in [
+            "Proteínas", "Glicose", "Cetona", "Hemoglobina", "Urobilinogênio",
+            "Bilirrubina", "Nitrito", "Depósito"]:
+            y = draw_field_line(x, y, campo)
+        c.line(x, y, x + col_width - margin, y)
+        y -= 12
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(x + col_width / 2, y, "Sedimentoscopia")
+        y -= 14
+        c.setFont("Helvetica", 9)
+        for campo in [
+            "Piócitos", "Células Epiteliais", "Hemácias", "Cilindros",
+            "Cristais", "Fil. de Muco", "Flora Bacteriana", "Leveduras"]:
+            y = draw_field_line(x, y, campo)
+        c.line(x, y, x + col_width - margin, y)
+        y -= 12
+        estado = "x" if "Gram" in selecionados else " "
+        c.drawString(x, y, f"( {estado} ) Gram:")
+        y -= 24
+        y = draw_observacoes(x, y)
+
+    def draw_coprologia(x, y):
+        y = draw_header(x, y)
+        estado = "x" if "Exame Parasitológico" in selecionados else " "
+        c.drawString(x, y, f"( {estado} ) Exame Parasitológico")
+        y -= 58
+        c.line(x, y, x + col_width - margin, y)
+        y -= 12
+        estado = "x" if "Sangue Oculto" in selecionados else " "
+        c.drawString(x, y, f"( {estado} ) Sangue Oculto")
+        y -= 12
+        for i in range(1, 4):
+            y -= 14
+            c.drawCentredString(x + col_width / 2, y, f"{i}ª amostra: ____/____/______")
+            y -= 14
+            c.drawCentredString(x + col_width / 2, y, "Positivo (   )        |      Negativo (   )")
+            y -= 14
+            c.line(x, y, x + col_width - margin, y)
+        y = draw_observacoes(x, y)
+        y -= 50
+
+        c.setFont("Helvetica-Bold", 12)
+        c.drawCentredString(x + col_width / 2, y, "Laboratório Municipal / UPA")
+        y -= 12
+        c.drawCentredString(x + col_width / 2, y, "TEL: 0800 678 2000")
+        y -= 12
+        c.drawCentredString(x + col_width / 2, y, "Resultado de exame")
+        y -= 20
+        c.setFont("Helvetica", 10)
+        c.drawString(x, y, "Dia: ____/____/_____ das 12h às 16h")
+        y -= 13
+        c.drawString(x, y, "DN:_____________________________")
+        y -= 13
+        c.drawString(x, y, "Nome:___________________________")
+        y -= 20
+        c.setFont("Helvetica-Oblique", 10)
+        for linha in [
+            "Entrega de resultado somente com",
+            "este comprovante e documento",
+            "com foto do paciente"]:
+            c.drawCentredString(x + col_width / 2, y, linha)
+            y -= 10
+
+    x0 = margin
+    x1 = x0 + col_width
+    x2 = x1 + col_width
+    x3 = x2 + col_width
+    y_start = altura - margin
+
+    draw_bioquimica(x0, y_start)
+    draw_hematologia(x1, y_start)
+    draw_urinalise(x2, y_start)
+    draw_coprologia(x3, y_start)
+class FichaApp:
+    def __init__(self, root):
+        self.root = root
+        root.title("Gerador de Fichas - Lab. Municipal SJDR")
+
+        tk.Label(root, text="Nome do paciente:").grid(row=0, column=0, sticky="e")
+        tk.Label(root, text="Data de nascimento:").grid(row=1, column=0, sticky="e")
+        tk.Label(root, text="Data da coleta:").grid(row=2, column=0, sticky="e")
+
+        self.nome_entry = tk.Entry(root, width=30)
+        self.nascimento_entry = tk.Entry(root, width=30)
+        self.coleta_entry = tk.Entry(root, width=30)
+
+        self.nome_entry.grid(row=0, column=1, pady=2)
+        self.nascimento_entry.grid(row=1, column=1, pady=2)
+        self.coleta_entry.grid(row=2, column=1, pady=2)
+
+        checkbox_frame = tk.Frame(root, relief=tk.SUNKEN, bd=1)
+        checkbox_frame.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
+
+        canvas_frame = tk.Canvas(checkbox_frame, width=600, height=300)
+        scrollbar = tk.Scrollbar(checkbox_frame, orient="vertical", command=canvas_frame.yview)
+        self.check_inner = tk.Frame(canvas_frame)
+
+        self.check_inner.bind(
+            "<Configure>",
+            lambda e: canvas_frame.configure(scrollregion=canvas_frame.bbox("all"))
+        )
+
+        canvas_frame.create_window((0, 0), window=self.check_inner, anchor="nw")
+        canvas_frame.configure(yscrollcommand=scrollbar.set)
+        canvas_frame.bind_all(
+            "<MouseWheel>",
+            lambda event: canvas_frame.yview_scroll(int(-1*(event.delta/120)), "units")
+        )
+
+        canvas_frame.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        self.check_vars = {}
+        for grupo, exames in CHECKBOXES.items():
+            tk.Label(self.check_inner, text=grupo, font=("Arial", 10, "bold"), anchor="w").pack(anchor="w", pady=(10, 0))
+            for exame in exames:
+                var = tk.BooleanVar()
+                chk = tk.Checkbutton(self.check_inner, text=exame, variable=var)
+                chk.pack(anchor="w")
+                self.check_vars[exame] = var
+
+        tk.Button(root, text="Limpar", command=self.limpar).grid(row=4, column=0, pady=10)
+        tk.Button(root, text="Imprimir", command=self.imprimir).grid(row=4, column=1, pady=10)
+
+    def limpar(self):
+        self.nome_entry.delete(0, tk.END)
+        self.nascimento_entry.delete(0, tk.END)
+        self.coleta_entry.delete(0, tk.END)
+        for var in self.check_vars.values():
+            var.set(False)
+
+    def imprimir(self):
+        nome = self.nome_entry.get().strip()
+        nascimento = self.nascimento_entry.get().strip()
+        coleta = self.coleta_entry.get().strip()
+
+        if not nome or not nascimento or not coleta:
+            messagebox.showerror("Erro", "Preencha todos os campos do paciente.")
+            return
+
+        selecionados = [exame for exame, var in self.check_vars.items() if var.get()]
+        caminho_pdf = salvar_pdf(nome, nascimento, coleta, selecionados)
+        imprimir_pdf(caminho_pdf)
+        messagebox.showinfo("Sucesso", f"Ficha gerada e enviada para impressão!")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = FichaApp(root)
+    root.mainloop()

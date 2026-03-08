@@ -16,7 +16,7 @@ def mostrar_splash():
 
     
     splash.configure(bg="white")
-    label = tk.Label(splash, text="LabFichas v3.2 Beta\n"
+    label = tk.Label(splash, text="LabFichas v1.4\n"
                                   "Desenvolvido por Paulo Ferreira\n"
                                   "Iniciando...", font=("Helvetica", 20, "bold"), bg="white", fg="#333333")
     label.pack(expand=True)
